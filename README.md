@@ -12,98 +12,122 @@ This project is a learning-oriented implementation inspired by [Skyvern](https:/
 
 **Important**: This tool is intended exclusively for use on websites and accounts where you have explicit authorization. Always comply with applicable terms of service, robots.txt, rate limits, and legal requirements. Unauthorized access or misuse may violate laws and platform policies. The project maintainers assume no responsibility for improper use.
 
-## Project Status
+## Current Status (June 2026)
 
-- Repository initialized with core structure.
-- Phase 1 (Core browser control with Playwright) started.
-- LLM integration, advanced login/OTP modules, and persistent session management planned for subsequent phases.
+**Major update completed**: Dedicated authentication module, interactive CLI with hybrid command parsing, persistent sessions, and improved structured extraction are now implemented.
 
-## Proposed Development Phases
+### What is Working Now
 
-1. **Phase 1: Foundational Browser Automation**  
-   Reliable navigation, screenshot capture, basic DOM-based text extraction, and element interaction using Playwright. Interactive command examples.
+- `auth.py` — Reusable functions for email login, forgot-password + OTP trigger, OTP entry, and Google sign-in (with popup handling).
+- `extraction.py` — Table extraction to clean JSON, section text extraction, and page summary utilities.
+- `interactive_cli.py` — Full interactive command-line agent featuring:
+  - Persistent browser context + cookie/storage state saving & loading (`storage_state.json` + `browser_data/` folder).
+  - Natural-language-style command input loop.
+  - Hybrid parser: robust rule-based matching + optional LiteLLM integration for true natural language understanding.
+  - Direct integration of auth and extraction modules.
+  - Session persistence across multiple commands without re-authentication.
 
-2. **Phase 2: Login & Authentication Flows**  
-   Modular functions for email/password login, forgot-password + OTP trigger + entry (user provides OTP), and Google "Continue with" button handling with popup/session support.
+You can now run a single long-lived browser session and issue commands sequentially (e.g., trigger OTP → enter the code you received → navigate → extract table).
 
-3. **Phase 3: LLM-Driven Agent**  
-   Integration of a large language model (Grok API, Ollama local models, or compatible provider via LiteLLM) to interpret natural language instructions, plan multi-step actions, observe page state, and execute or suggest next steps. Human-in-the-loop support for sensitive actions (e.g., OTP entry confirmation).
+## Project Phases
 
-4. **Phase 4: Robustness & Advanced Features**  
-   Error recovery, retry logic, stealth techniques, persistent browser contexts/cookies, structured data extraction with JSON schemas, file downloads, and support for complex multi-page workflows.
-
-5. **Phase 5: Interface & Deployment (Optional)**  
-   CLI enhancements, simple web UI (FastAPI + React), Docker packaging, or integration into larger personal productivity tools. Exploration of local LLM deployment on resource-constrained environments.
-
-## Tech Stack (Current & Planned)
-
-- **Core**: Python 3.11+, Playwright (browser automation)
-- **Configuration**: python-dotenv
-- **Future LLM Layer**: LiteLLM (unified interface), direct Grok / OpenAI / Anthropic clients, or Ollama for local models
-- **Optional Backend/UI**: FastAPI, React (for dashboard or command interface)
-- **Data Handling**: JSON schema validation for extraction, Pillow (if image processing required)
+1. **Phase 1 (Complete)**: Core Playwright navigation, screenshots, basic extraction.
+2. **Phase 2 (Complete)**: Reusable auth flows + interactive CLI + persistence + structured extraction.
+3. **Phase 3 (In Progress)**: Full LLM-driven planning and more robust natural language understanding (LiteLLM / Grok / Ollama ready).
+4. **Phase 4+**: Error recovery, advanced stealth, UI layer, production hardening.
 
 ## Getting Started
 
-### Prerequisites
-- Python 3.11 or higher
-- Git
-- A modern browser (Chromium recommended)
-
-### Installation
+### 1. Installation
 
 ```bash
 git clone https://github.com/nilabh25bcs10235-beep/ai-web-automation-agent.git
 cd ai-web-automation-agent
 
-# Create and activate virtual environment
 python -m venv venv
-source venv/bin/activate   # On Windows: venv\Scripts\activate
-
-# Install dependencies
+source venv/bin/activate
 pip install -r requirements.txt
-
-# Install Playwright browsers (first time only)
 playwright install chromium
 ```
 
-### Running the Starter Agent
-
-The initial `browser_agent.py` demonstrates navigation to any URL, full-page screenshot capture, and basic text extraction.
+### 2. (Optional but Recommended) Enable LLM Parsing
 
 ```bash
-python browser_agent.py --url "https://example.com" --headless
+pip install litellm
 ```
 
-- Omit `--headless` to see the browser window (useful during development).
-- Use `--no-screenshot` or `--no-extract` to disable specific features.
-- Screenshots are saved to the `artifacts/` directory.
+Create a `.env` file (or export variables):
 
-### Next Steps After Running the Example
+```env
+LITELLM_MODEL=ollama/llama3.2          # Local via Ollama (recommended for privacy)
+# LITELLM_MODEL=xai/grok-2               # xAI Grok (set XAI_API_KEY)
+# LITELLM_MODEL=gpt-4o-mini
+```
 
-1. Review the extensive comments and TODOs inside `browser_agent.py`.
-2. Extend the `run_agent` function or add new modules (e.g., `auth.py`) for login logic using Playwright locators such as `page.get_by_label("Email").fill(...)` and `page.get_by_role("button", name=...).click()`.
-3. Implement an interactive loop that accepts commands like "trigger forgot password", "enter OTP: 123456", or "navigate to billing and extract table data".
-4. Add LLM planning once comfortable with the Playwright layer.
+Start Ollama (if using local models) before running the CLI.
 
-## Safety, Security & Best Practices
+### 3. Run the Interactive Agent
 
-- Never hard-code credentials or OTPs in source code. Use environment variables or secure vaults.
-- For Google OAuth flows, prefer persistent contexts or user-confirmed steps rather than fully automated credential entry.
-- Test on non-production or demo sites first.
-- Monitor for CAPTCHAs, rate limits, and anti-automation measures; implement appropriate delays and randomization where needed.
-- Review and respect each website’s robots.txt and terms of service.
+```bash
+python interactive_cli.py
+```
 
-## References & Inspiration
+The agent will open a browser window and present a prompt (`>`). Type commands in natural language.
 
-- [Skyvern](https://github.com/Skyvern-AI/skyvern) — Mature open-source LLM + computer vision browser agent (strongly recommended for production use or as a reference implementation).
-- [Playwright Documentation](https://playwright.dev/python/)
-- Browser automation best practices and ethical guidelines.
+### Example Commands You Can Try
 
-## Contributing / Iteration
+```text
+> navigate to https://example.com
+> login with email test@example.com password MySecret123
+> trigger forgot password for test@example.com
+> enter otp 456789
+> click sign in with google
+> take screenshot
+> extract the main table as json
+> go to dashboard and show summary
+> navigate to https://the-internet.herokuapp.com/tables
+> extract table
+> save session
+> exit
+```
 
-This is an active learning project. Suggestions for improvements, new modules (e.g., OTP handler, Google auth helper, LLM action planner), bug reports, or pull requests are welcome. Please open an issue to discuss significant changes.
+After most actions the agent prints a quick page summary (title + URL).
+
+Type `exit` (or Ctrl+C) to cleanly save the session and close.
+
+### Session Persistence
+
+- Cookies, localStorage, and some site data are saved automatically on exit or `save session` command.
+- On next run the browser re-opens with the previous session (no need to log in again for many sites).
+- Delete `storage_state.json` and the `browser_data/` folder to start fresh.
+
+## Module Overview
+
+- `auth.py` — All authentication logic (email, OTP, Google). Import and call the functions directly from your own scripts if preferred.
+- `extraction.py` — Clean table → JSON, section extraction, page summaries.
+- `interactive_cli.py` — The full interactive experience (recommended entry point).
+- `browser_agent.py` — Original simple non-interactive starter (still useful for one-off scripts).
+
+## Safety & Best Practices
+
+- Never commit credentials, OTPs, or `storage_state.json`.
+- For Google OAuth, the current implementation handles the initial click and popup; full automated completion usually benefits from user presence or pre-saved sessions.
+- Always verify the current page state after login/OTP steps.
+- Use the `save session` command before exiting long-running tasks.
+
+## Next Development Priorities
+
+- Improve LLM prompt engineering and structured output reliability.
+- Add more robust entity extraction (email, OTP, target URLs) in the rule-based parser.
+- Support for multi-step workflows defined in a single command.
+- Optional richer CLI (Rich library) or simple web UI.
+- Better error recovery and retry logic.
+
+## References
+
+- [Skyvern](https://github.com/Skyvern-AI/skyvern)
+- Playwright Python docs
 
 ---
 
-*Built as a personal learning and productivity project. Use responsibly.*
+*Use responsibly and only on authorized sites.*
