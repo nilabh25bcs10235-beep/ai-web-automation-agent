@@ -1,7 +1,13 @@
 playwright>=1.44.0
 python-dotenv>=1.0.0
 
-# Future LLM integration (uncomment as needed)
-# litellm>=1.0.0
-# openai>=1.0.0
-# httpx>=0.27.0
+# LLM integration (recommended for natural language command parsing)
+# Install with: pip install litellm
+# Then set LITELLM_MODEL in your .env, e.g.:
+#   LITELLM_MODEL=ollama/llama3.2          # for local Ollama
+#   LITELLM_MODEL=gpt-4o-mini              # or any supported model
+#   LITELLM_MODEL=xai/grok-2               # for xAI Grok (requires XAI_API_KEY)
+# litellm>=1.40.0
+
+# Optional helpers
+# rich>=13.0.0   # for prettier CLI output (future)
