@@ -1,6 +1,11 @@
 playwright>=1.44.0
 python-dotenv>=1.0.0
 
+# Web API layer (Round 2+)
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.7.0
+
 # LLM integration (recommended for natural language command parsing)
 # Install with: pip install litellm
 # Then set LITELLM_MODEL in your .env, e.g.:
