@@ -13,7 +13,8 @@ Features implemented in this iteration:
 - Session persistence across commands without repeated re-authentication
 
 Usage:
-  python interactive_cli.py
+  python interactive_cli.py                     # Interactive mode
+  python interactive_cli.py --command "navigate to https://example.com and take screenshot"
 
 Then type commands such as:
   login with email user@example.com password MyPass123
@@ -58,21 +59,21 @@ from extraction import (
 STORAGE_STATE_PATH = "storage_state.json"
 
 
-def get_persistent_context(p):
+def get_persistent_context(p, headless: bool = False):
     """Create or restore a browser context with saved cookies/storage."""
     if os.path.exists(STORAGE_STATE_PATH):
         print(f"[cli] Loading existing session from {STORAGE_STATE_PATH}")
         context = p.chromium.launch_persistent_context(
-            user_data_dir="./browser_data",  # persists more than just cookies
+            user_data_dir="./browser_data",
             storage_state=STORAGE_STATE_PATH,
-            headless=False,
+            headless=headless,
             viewport={"width": 1366, "height": 768},
         )
     else:
         print("[cli] Starting fresh browser session (no saved state found)")
         context = p.chromium.launch_persistent_context(
             user_data_dir="./browser_data",
-            headless=False,
+            headless=headless,
             viewport={"width": 1366, "height": 768},
         )
     return context
@@ -90,22 +91,9 @@ def save_session(context):
 def parse_command(command: str) -> dict:
     """
     Hybrid parser: tries LiteLLM first (if configured), falls back to keyword rules.
-
-    Returns a structured action dict, e.g.:
-        {"action": "login", "email": "...", "password": "..."}
-        {"action": "trigger_otp", "email": "..."}
-        {"action": "enter_otp", "otp": "123456"}
-        {"action": "google_signin"}
-        {"action": "screenshot"}
-        {"action": "extract_table"}
-        {"action": "extract_section", "description": "dashboard"}
-        {"action": "navigate", "url": "..."}
-        {"action": "save_session"}
-        {"action": "exit"}
     """
     cmd_lower = command.lower().strip()
 
-    # --- LiteLLM path (optional, enabled when LITELLM_MODEL is set) ---
     model = os.getenv("LITELLM_MODEL")
     if model:
         try:
@@ -128,7 +116,6 @@ def parse_command(command: str) -> dict:
                 max_tokens=300,
             )
             content = response.choices[0].message.content.strip()
-            # Clean possible markdown code fences
             if content.startswith("```json"):
                 content = content.split("```json")[1].split("```")[0].strip()
             parsed = json.loads(content)
@@ -138,23 +125,23 @@ def parse_command(command: str) -> dict:
         except Exception as e:
             print(f"[cli] LLM parsing failed, falling back to rules: {e}")
 
-    # --- Rule-based fallback parser (always available) ---
+    # Rule-based fallback
     if "login" in cmd_lower and "email" in cmd_lower:
-        # Very simple entity extraction
         import re
         email_match = re.search(r"[\w\.-]+@[\w\.-]+\.[a-zA-Z]{2,}", command)
         email = email_match.group(0) if email_match else ""
-        # Password extraction is crude; in real use prefer secure input or env
         pw_match = re.search(r"password\s+([\w@#$%^&*!]+)", cmd_lower)
         password = pw_match.group(1) if pw_match else ""
         return {"action": "login", "email": email, "password": password}
 
     if "forgot password" in cmd_lower or "trigger otp" in cmd_lower:
+        import re
         email_match = re.search(r"[\w\.-]+@[\w\.-]+\.[a-zA-Z]{2,}", command)
         email = email_match.group(0) if email_match else ""
         return {"action": "trigger_otp", "email": email}
 
     if "enter otp" in cmd_lower or "otp" in cmd_lower:
+        import re
         otp_match = re.search(r"\b(\d{4,8})\b", command)
         otp = otp_match.group(1) if otp_match else ""
         return {"action": "enter_otp", "otp": otp}
@@ -169,11 +156,11 @@ def parse_command(command: str) -> dict:
         return {"action": "extract_table"}
 
     if "extract" in cmd_lower and ("section" in cmd_lower or "summary" in cmd_lower):
-        # crude description extraction
         desc = command.split("extract")[-1].strip() if "extract" in cmd_lower else "main content"
         return {"action": "extract_section", "description": desc}
 
     if "navigate" in cmd_lower or "go to" in cmd_lower:
+        import re
         url_match = re.search(r"https?://[^\s]+", command)
         url = url_match.group(0) if url_match else ""
         return {"action": "navigate", "url": url}
@@ -184,7 +171,6 @@ def parse_command(command: str) -> dict:
     if cmd_lower in ("exit", "quit", "q"):
         return {"action": "exit"}
 
-    # Default: treat as free-form navigation or section request
     return {"action": "unknown", "raw": command}
 
 
@@ -227,7 +213,6 @@ def dispatch_action(page, action: dict, context):
         data = extract_table_as_json(page)
         if data:
             print(json.dumps(data, indent=2))
-            # Optionally save
             with open("artifacts/extracted_table.json", "w") as f:
                 json.dump(data, f, indent=2)
             print("[cli] Table also saved to artifacts/extracted_table.json")
@@ -261,20 +246,47 @@ def dispatch_action(page, action: dict, context):
     return None
 
 
+def run_single_command(command: str, headless: bool = False):
+    """Run a single command non-interactively and exit (useful for scripting and deployment)."""
+    print(f"[cli] Running single command: {command}")
+
+    with sync_playwright() as p:
+        context = get_persistent_context(p, headless=headless)
+        page = context.new_page()
+
+        action = parse_command(command)
+        result = dispatch_action(page, action, context)
+
+        if action.get("action") not in ("exit", "save_session"):
+            try:
+                summary = extract_page_summary(page)
+                print(f"[page] {summary.get('title', '')} | {summary.get('url', '')[:60]}...")
+            except:
+                pass
+
+        if result != "exit":
+            save_session(context)
+
+        context.close()
+        print("[cli] Single command completed.")
+
+
 def run_interactive_cli():
     parser = argparse.ArgumentParser(description="Interactive AI Web Automation Agent CLI")
     parser.add_argument("--headless", action="store_true", help="Run browser headless")
+    parser.add_argument("--command", help="Run a single command non-interactively and exit")
     args = parser.parse_args()
 
+    if args.command:
+        run_single_command(args.command, headless=args.headless)
+        return
+
+    # Interactive mode (original behavior)
     print("=== AI Web Automation Agent - Interactive CLI ===")
     print("Type natural-language commands. Type 'exit' to quit and save session.\n")
 
     with sync_playwright() as p:
-        context = get_persistent_context(p)
-        if args.headless:
-            # Re-launch headless if requested (persistent_context is headed by default in this setup)
-            pass  # For simplicity we keep the launched context; advanced users can modify
-
+        context = get_persistent_context(p, headless=args.headless)
         page = context.new_page()
 
         print("Browser ready. Current page:", page.url or "about:blank")
@@ -291,10 +303,12 @@ def run_interactive_cli():
                 if result == "exit":
                     break
 
-                # After most actions, show a quick page summary
                 if action.get("action") not in ("exit", "save_session"):
-                    summary = extract_page_summary(page)
-                    print(f"[page] {summary.get('title', '')} | {summary.get('url', '')[:60]}...")
+                    try:
+                        summary = extract_page_summary(page)
+                        print(f"[page] {summary.get('title', '')} | {summary.get('url', '')[:60]}...")
+                    except:
+                        pass
 
             except KeyboardInterrupt:
                 print("\n[cli] Interrupted by user. Saving session...")
